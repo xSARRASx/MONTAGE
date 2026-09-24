@@ -1,6 +1,33 @@
 # MONTAGE — Vidéo Masterclass conciergerie (verticale 9:16)
 
-Vidéo finale : `output/montage_final.mp4` (1080×1920, 30 i/s, H.264 + AAC, −14 LUFS, ~36,5 s, < 30 Mo).
+## Version 3 — style sobre (recommandée) : `output/montage_sobre.mp4`
+
+Inspirée du *principe* de la vidéo de référence (épuré, beige / blanc papier / vert sauge, cartes plein écran,
+3D discrète) mais avec des idées différentes :
+
+- **Visage dans un cadre arrondi** sur fond beige, recadré juste au-dessus des anciens sous-titres incrustés
+  (qui disparaissent), avec des pastilles vertes : « 10 ans d'accompagnement », « Location courte durée »,
+  « Clique autour de la vidéo », « Résultats garantis ».
+- **Cartes plein écran** pendant les anciens bandeaux orange/bleu (qui sont ainsi masqués) :
+  | Moment | Carte |
+  |---|---|
+  | « 3 propriétaires signés… 6 mois » | 3 contrats 3D qui se posent, signature qui s'écrit, tampon vert « signé » + frise M1→M6 |
+  | « Pierre… mon père… 4 ans » | « Pierre & son père. » + chiffres clés « 4 ans » / « +10 ans » |
+  | « 1 500 vidéos sur YouTube » | compteur 0 → 1 500 + mosaïque de vignettes |
+  | « La conciergerie c'est quoi ? … accompagner » | « C'est quoi ? » → « Accompagner des propriétaires. » + maison 3D épurée |
+  | « 20 et 25 % de commissions » | compteur « 20 à 25 % » + bloc 3D « revenu locatif » dont le quart vert se détache |
+  | « Masterclass 100 % gratuite… » | carte sombre, visuel de la masterclass, checklist qui se coche |
+  | Fin | « Lance ta conciergerie. » + bouton « VOIR LA MASTERCLASS » |
+- **Sous-titres** refaits (police Manrope), un mot-clé en vert par phrase.
+- **Son** : musique douce (piano électrique), effets discrets, voix nettoyée, −14 LUFS.
+
+Reconstruire : `./build_sobre.sh <video_source.mp4> <dossier_travail>`
+(`src/render3d_sobre.py`, `src/composite_sobre.py`, `src/audio_sobre.py`).
+
+---
+
+## Version 2 — 3D noir + or : `output/montage_final.mp4`
+Vidéo : `output/montage_final.mp4` (1080×1920, 30 i/s, H.264 + AAC, −14 LUFS, ~36,5 s, < 30 Mo).
 
 ## Ce qui a été fait
 

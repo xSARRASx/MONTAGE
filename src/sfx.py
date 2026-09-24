@@ -92,9 +92,46 @@ def music(dur, bpm=112):
             add(pad, 0.12, 0.0)
     return out
 
+def music_soft(dur, bpm=86):
+    """Musique douce : accords de piano électrique chauds, basse ronde, pulsation très légère (style épuré)."""
+    N = int(dur * SR); out = np.zeros((N, 2)); beat = 60 / bpm
+    chords = [[57, 60, 64, 67, 71], [53, 57, 60, 64, 67], [48, 52, 55, 59, 64], [55, 59, 62, 66, 69]]  # Am9 Fmaj9 Cmaj7 G6
+    m2f = lambda m: 440 * 2 ** ((m - 69) / 12)
+    def ep(f, d):
+        t = t_(d)
+        x = np.sin(2 * np.pi * f * t + 0.8 * np.sin(2 * np.pi * f * t) * np.exp(-t * 4))
+        x += 0.25 * np.sin(2 * np.pi * 2 * f * t) * np.exp(-t * 3)
+        return x * np.exp(-t * 1.1) * np.minimum(1, t / 0.008)
+    def add(sig, gain, start, pan=0.0):
+        if start >= N: return
+        e = min(N, start + len(sig))
+        out[start:e, 0] += sig[:e - start] * gain * (1 - pan); out[start:e, 1] += sig[:e - start] * gain * (1 + pan)
+    nbars = int(dur / (beat * 4)) + 1
+    for bar in range(nbars):
+        s0 = int(bar * 4 * beat * SR); ch = chords[bar % 4]
+        for j, m in enumerate(ch):                       # accord légèrement arpégé
+            add(ep(m2f(m), beat * 4.2), 0.16, s0 + int(j * 0.018 * SR), (j - 2) * 0.12)
+        for j, off in enumerate((2.5, 3.5)):              # petits rappels
+            add(ep(m2f(ch[-1 - j] + 12), beat * 1.5), 0.05, s0 + int(off * beat * SR), 0.3 - 0.6 * j)
+        bt = t_(beat * 3.8); f0 = m2f(ch[0] - 24)
+        add(np.sin(2 * np.pi * f0 * bt) * np.exp(-bt * 0.9) * np.minimum(1, bt / 0.02), 0.32, s0)
+        for k in range(4):                                # pulsation feutrée
+            kt = t_(0.25)
+            add(np.sin(2 * np.pi * np.cumsum(45 + 60 * np.exp(-kt * 25)) / SR) * np.exp(-kt * 14), 0.25, s0 + int(k * beat * SR))
+            ht = t_(0.05); hh = rng.standard_normal(len(ht)); hh = (hh - lp(hh, 8000)) * np.exp(-ht * 90)
+            add(hh, 0.035, s0 + int((k + 0.5) * beat * SR), 0.25)
+    return out
+
+def whoosh_soft(d=0.45):
+    t = t_(d); n = rng.standard_normal(len(t))
+    env = np.sin(np.pi * t / d) ** 3
+    x = lp(lp(n, 400 + 2200 * t / d), 2500) * env
+    return x
+
 if __name__ == '__main__':
     d = sys.argv[1]; os.makedirs(d, exist_ok=True)
     save(f'{d}/whoosh.wav', whoosh()); save(f'{d}/whoosh_dn.wav', whoosh(0.5, False))
     save(f'{d}/impact.wav', impact()); save(f'{d}/pop.wav', pop()); save(f'{d}/pop_hi.wav', pop(1400))
     save(f'{d}/ding.wav', ding()); save(f'{d}/riser.wav', riser()); save(f'{d}/tick.wav', tick())
     save(f'{d}/cash.wav', cash()); save(f'{d}/music.wav', music(float(sys.argv[2])))
+    save(f'{d}/music_soft.wav', music_soft(float(sys.argv[2]))); save(f'{d}/whoosh_soft.wav', whoosh_soft())
