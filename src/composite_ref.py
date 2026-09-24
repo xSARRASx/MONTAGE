@@ -45,7 +45,7 @@ SCENES = [      # version simple : Pierre presque tout le temps, 2 cartes seulem
     ('face_fin', 29.45, VOICE_END),
     ('fin', VOICE_END, None),
 ]
-TRANS = 0.30   # durée des transitions entre scènes (s)
+TRANS = 0.10   # durée des transitions entre scènes (s)
 
 # ------------------------------------------------------------------ utilitaires
 def clamp(x, a=0.0, b=1.0): return max(a, min(b, x))
@@ -288,10 +288,10 @@ def pill_subtitles(img, ts, chunks, rects, with_text=True):
     else:
         if with_text and ts < b_: subtitles_video(img, ts, chunks)
         return
-    one = text_img(tuple((w + ' ', (1.0, 1.0, 1.0)) for w in words_), 800, 58)
+    one = text_img(tuple((w + ' ', (1.0, 1.0, 1.0)) for w in words_), 800, 66)
     two = one.shape[1] > 940 and len(words_) >= 2              # deux lignes seulement si la phrase est trop longue
     lines = split_two(words_) if two else [list(range(len(words_)))]
-    ims = [text_img(tuple((words_[j] + (' ' if j != idx[-1] else ''), SAGE_L if j == hl else (1.0, 1.0, 1.0)) for j in idx), 800, 58)
+    ims = [text_img(tuple((words_[j] + (' ' if j != idx[-1] else ''), SAGE_L if j == hl else (1.0, 1.0, 1.0)) for j in idx), 800, 66)
            for idx in lines]
     tw = max(im.shape[1] for im in ims); lh = ims[0].shape[0]
     y0, y1 = y0 - 10, y1 + 10
@@ -305,10 +305,11 @@ def pill_subtitles(img, ts, chunks, rects, with_text=True):
         x0 = min(x0 - 10, cx - tw / 2 - 36); x1 = max(x1 + 10, cx + tw / 2 + 36)
         rad = min(28, int(y1 - y0) // 2)
     # ombre douce et floue (pas de rectangle) posée sur la zone de l'ancienne boîte, puis texte blanc
-    pad = 60
+    # voile très léger et très flou sur la zone effacée (aucun bord visible)
+    pad = 90
     m = np.zeros((int(y1 - y0) + 2 * pad, int(x1 - x0) + 2 * pad), np.float32)
     m[pad:-pad, pad:-pad] = 1.0
-    m = cv2.GaussianBlur(m, (0, 0), 24) * 0.72
+    m = cv2.GaussianBlur(m, (0, 0), 38) * 0.38
     rg = np.zeros(m.shape + (4,), np.float32); rg[..., :3] = PILL; rg[..., 3] = m
     blit(img, rg, x0 - pad, y0 - pad, 1.0)
     if with_text and k > 0:
@@ -438,15 +439,32 @@ def clean_frame(frames, si):
     return _inp[si]
 
 S0 = H / 848
-BOTTOM_SHADE = np.clip((np.arange(H, dtype=np.float32) - 1080) / 700, 0, 1)[:, None, None] ** 1.05 * 0.78
+BOTTOM_SHADE = np.clip((np.arange(H, dtype=np.float32) - 1250) / 670, 0, 1)[:, None, None] ** 1.3 * 0.42
 
-def face_geom(ts, zoom):
-    """Échelle et points d'ancrage du plan visage : sortie p -> source q = A + (p - P) / s."""
+# moments où le rush montre encore en haut le titre ou les anciens bandeaux orange/bleu
+FENETRES_HAUT = [(0.0, 3.0), (4.55, 8.2), (12.35, 16.35), (19.25, 23.25), (25.25, 29.4)]
+
+def poids_serre(ts):
+    """0 = cadrage normal, 1 = cadrage légèrement resserré (haut du rush hors champ), transitions douces."""
+    w = 0.0
+    for a, b in FENETRES_HAUT:
+        w = max(w, ease_in_out((ts - (a - 0.5)) / 0.5) * (1 - ease_in_out((ts - b) / 0.5)))
+    return w
+
+def face_geom(ts, zoom=None):
+    """Cadrage du plan visage : sortie p -> source q = A + (p - P) / s.
+    Normal (comme la v4) : zoom 1,18 ancré sous le visage. Resserré : zoom 1,38 calé sur le bas du rush,
+    juste assez pour sortir les anciens bandeaux du haut."""
+    w = poids_serre(ts)
     start, idx = shot_start(ts)
-    z = zoom + (0.04 if idx % 2 else 0.0) + 0.035 * ease_in_out((ts - start) / 4)
-    s = S0 * z
-    A = np.array([226.0, 636.0]); P = np.array([W / 2, H * 0.75])     # ancrage sous le visage (logo hors cadre)
-    M = np.array([[1 / s, 0, A[0] - P[0] / s], [0, 1 / s, A[1] - P[1] / s]], np.float64)
+    push = 0.02 * ease_in_out((ts - start) / 4)
+    s_n = S0 * (1.18 + push); A_n = np.array([226.0, 636.0]); P_n = np.array([W / 2, H * 0.75])
+    s_t = S0 * (1.38 + push); A_t = np.array([226.0, 846.0]); P_t = np.array([W / 2, float(H)])
+    # interpolation de la correspondance sortie -> source (matrices affines)
+    def mat(s_, A_, P_): return np.array([[1 / s_, 0, A_[0] - P_[0] / s_], [0, 1 / s_, A_[1] - P_[1] / s_]], np.float64)
+    M = mat(s_n, A_n, P_n) * (1 - w) + mat(s_t, A_t, P_t) * w
+    s = 1 / M[0, 0]
+    P = np.array([W / 2, H / 2]); A = M[:, :2] @ P + M[:, 2]
     return s, A, P, M
 
 def box_rects_out(mask, s, A, P):

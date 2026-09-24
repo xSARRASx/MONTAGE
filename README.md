@@ -1,6 +1,14 @@
 # MONTAGE — Vidéo Masterclass conciergerie (verticale 9:16)
 
-## Version 10 — simple (recommandée) : `output/montage_v10.mp4`
+## Version 11 — simple, cadrage naturel (recommandée) : `output/montage_v11.mp4`
+
+Comme la version 10, avec :
+- **Cadrage normal sur Pierre** (zoom 1,18 comme la v4) ; léger resserrement progressif (1,38, calé sur le bas du
+  rush) seulement quand le rush montre en haut le titre ou les anciens bandeaux.
+- **Plus de bloc sombre autour des sous-titres** : texte blanc plus grand, ombre des lettres et voile très léger et flou.
+- **Coupes franches** (0,1 s) entre Pierre et les cartes : plus de carte qui apparaît en transparence sur son visage.
+
+## Version 10 : `output/montage_v10.mp4`
 
 Demande : moins d'effets, beaucoup plus de Pierre, pas de gros carré vert.
 - **Pierre presque tout le temps**, cadrage serré qui laisse hors champ le logo, le titre et les anciens bandeaux.
