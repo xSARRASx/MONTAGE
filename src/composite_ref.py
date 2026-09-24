@@ -37,16 +37,10 @@ NFR = int(DUR * FPS)
 o = src_to_out
 
 # (type, début source, fin source) — les fins de bandeaux d'origine sont couvertes avec une marge
-SCENES = [
-    ('face_hook', 0.00, 0.95),
-    ('contrats', 0.95, 4.45),
-    ('face_pierre', 4.45, 5.65),
-    ('equipe', 5.65, 8.25),
-    ('chaine', 8.25, 12.30),
-    ('conciergerie', 12.30, 16.45),
-    ('face_lcd', 16.45, 19.10),
-    ('commission', 19.10, 23.40),
-    ('face_clic', 23.40, 25.20),
+SCENES = [      # version simple : Pierre presque tout le temps, 2 cartes seulement
+    ('face_debut', 0.00, 9.10),
+    ('chaine', 9.10, 11.96),
+    ('face_milieu', 12.14, 25.20),
     ('masterclass', 25.20, 29.45),
     ('face_fin', 29.45, VOICE_END),
     ('fin', VOICE_END, None),
@@ -294,7 +288,8 @@ def pill_subtitles(img, ts, chunks, rects, with_text=True):
     else:
         if with_text and ts < b_: subtitles_video(img, ts, chunks)
         return
-    two = two and len(words_) >= 2
+    one = text_img(tuple((w + ' ', (1.0, 1.0, 1.0)) for w in words_), 800, 58)
+    two = one.shape[1] > 940 and len(words_) >= 2              # deux lignes seulement si la phrase est trop longue
     lines = split_two(words_) if two else [list(range(len(words_)))]
     ims = [text_img(tuple((words_[j] + (' ' if j != idx[-1] else ''), SAGE_L if j == hl else (1.0, 1.0, 1.0)) for j in idx), 800, 58)
            for idx in lines]
@@ -304,18 +299,25 @@ def pill_subtitles(img, ts, chunks, rects, with_text=True):
     if (y1 - y0) < need:
         c_ = (y0 + y1) / 2; y0, y1 = c_ - need / 2, c_ + need / 2
     if band:
-        x0, x1, rad, cx = -40, W + 40, 0, W / 2
+        x0, x1, rad, cx = 0, W, 0, W / 2
     else:
         cx = (x0 + x1) / 2
         x0 = min(x0 - 10, cx - tw / 2 - 36); x1 = max(x1 + 10, cx + tw / 2 + 36)
         rad = min(28, int(y1 - y0) // 2)
-    pw, ph = int(x1 - x0), int(y1 - y0)
-    if not band: soft_shadow(img, x0, y0, pw, ph, rad, 0.22, 16, 8)
-    fill_rrect(img, x0, y0, pw, ph, max(rad, 1), PILL, 1.0)
+    # ombre douce et floue (pas de rectangle) posée sur la zone de l'ancienne boîte, puis texte blanc
+    pad = 60
+    m = np.zeros((int(y1 - y0) + 2 * pad, int(x1 - x0) + 2 * pad), np.float32)
+    m[pad:-pad, pad:-pad] = 1.0
+    m = cv2.GaussianBlur(m, (0, 0), 24) * 0.72
+    rg = np.zeros(m.shape + (4,), np.float32); rg[..., :3] = PILL; rg[..., 3] = m
+    blit(img, rg, x0 - pad, y0 - pad, 1.0)
     if with_text and k > 0:
         tot = lh * len(ims) + (len(ims) - 1) * 4
         ty = (y0 + y1) / 2 - tot / 2 - 2 + (1 - k) * 6
         for im in ims:
+            sh = cv2.GaussianBlur(np.pad(im[..., 3], 20), (0, 0), 6) * 0.6
+            srg = np.zeros(sh.shape + (4,), np.float32); srg[..., 3] = sh
+            blit(img, srg, cx - im.shape[1] / 2 - 20, ty - 20 + 3, k)
             blit(img, im, cx - im.shape[1] / 2, ty, k); ty += lh + 4
 
 _halo = {}
@@ -454,7 +456,8 @@ def box_rects_out(mask, s, A, P):
         out.append((p0[0], p0[1], p1[0], p1[1], y1 - y0))
     return out
 
-FACE_ZOOM = {'face_hook': 1.42, 'face_pierre': 1.60}
+FACE_ZOOM = {}
+ZOOM_SIMPLE = 1.60
 PILLS = {}          # index de phrase -> pastille stable (x0, y0, x1, y1, deux_lignes, bande_pleine_largeur)
 
 def chunk_index(ts, chunks):
@@ -476,7 +479,7 @@ def precompute_pills(frames, chunks):
         if not kind.startswith('face_'): continue
         ts = out_to_src(t)
         si = min(len(frames) - 1, int(round(ts * 30)))
-        s, A, P, M = face_geom(ts, FACE_ZOOM.get(kind, 1.18))
+        s, A, P, M = face_geom(ts, FACE_ZOOM.get(kind, ZOOM_SIMPLE))
         rects = box_rects_out(subtitle_mask(frames[si]), s, A, P)
         ci = chunk_index(ts, chunks)
         if ci is None or not rects: continue
@@ -631,21 +634,24 @@ def logo_pill(name, h_logo):
         _logos[k] = card
     return _logos[k]
 
-def pop_logo(img, t, t0, name, h_logo, x, y, anchor='left'):
+def pop_logo(img, t, t0, name, h_logo, x, y, anchor='left', until=None):
     if t < t0: return
+    if until is not None and t > until + 0.3: return
     k = ease_out_back((t - t0) / 0.45, 1.8)
     card = logo_pill(name, h_logo)
     sc = max(0.05, 0.6 + 0.4 * k)
     im = cv2.resize(card, (max(2, int(card.shape[1] * sc)), max(2, int(card.shape[0] * sc))), interpolation=cv2.INTER_AREA)
     if anchor == 'center': x = x - im.shape[1] / 2
-    op = clamp((t - t0) / 0.2)
+    op = clamp((t - t0) / 0.2) * (1 - clamp((t - until) / 0.3) if until is not None else 1)
     soft_shadow(img, x, y + (card.shape[0] - im.shape[0]) / 2, im.shape[1], im.shape[0], im.shape[0] // 2, 0.22 * op, 18, 12)
     blit(img, im, x, y + (card.shape[0] - im.shape[0]) / 2, op)
 
-def pop_name(img, t, t0):
+def pop_name(img, t, t0, until=None):
     """Prénom en surimpression (« Pierre ») quand il se présente."""
     if t < t0: return
     op, dy = appear(t, t0, 0.35)
+    if until is not None: op *= 1 - clamp((t - until) / 0.3)
+    if op <= 0: return
     im = text_img((('Pierre', INK),), 800, 58)
     sub_ = text_img((('Conciergerie Airbnb', MUTED),), 700, 30)
     pw = max(im.shape[1], sub_.shape[1]) + 76; ph = 150
@@ -708,7 +714,7 @@ def rounded_img(im, r):
 
 def card_chaine(img, t, E, YT):
     """Carte « chaîne YouTube de Sébastien MORE » : profil, 10 ans → 1 500 vidéos, vraies miniatures."""
-    t0 = o(8.25)
+    t0 = o(9.10)
     label(img, t, t0, 'LA CHAÎNE YOUTUBE')
     # en-tête profil
     op, dy = appear(t, t0 + 0.08)
@@ -811,37 +817,6 @@ def card_masterclass(img, t, E):
     title(img, t, t0 + 0.05, [[('Une masterclass', INK)]])
     op, dy = appear(t, o(28.1))
     put_text(img, [('100\u00a0% gratuite.', SAGE)], 800, 86, 76, 301 + dy, op)
-    items = [(o(27.35), "Comment fonctionne l'activité"), (o(27.85), 'Comment lancer ta conciergerie'), (o(28.35), 'Comment obtenir des résultats')]
-    if t >= items[0][0] - 0.2:
-        opp = clamp((t - items[0][0] + 0.2) / 0.3)
-        soft_shadow(img, 60, 1180, 960, 262, 34, 0.18 * opp, 22, 14)
-        fill_rrect(img, 60, 1180, 960, 262, 34, (1.0, 1.0, 1.0), 0.94 * opp)
-    for i, (tt, s_) in enumerate(items):
-        op, dy = appear(t, tt, 0.4)
-        y = 1204 + i * 78 + dy
-        check_icon(img, 118, y + 26, 24, SAGE, CREAM, op, clamp((t - tt - 0.1) / 0.3))
-        put_text(img, [(s_, INK)], 700, 38, 164, y, op)
-
-CHAMBRE = None
-def chambre_bg(img, t, t0, dur, zoom0=1.0, zoom1=1.07):
-    """Photo de chambre (rendu 3D) avec lent mouvement de caméra (Ken Burns)."""
-    global CHAMBRE
-    if CHAMBRE is None:
-        CHAMBRE = cv2.imread(os.path.join(ROOT, 'assets', 'images', 'chambre.png'))[..., ::-1].astype(np.float32) / 255
-    k = ease_in_out((t - t0) / dur)
-    z = zoom0 + (zoom1 - zoom0) * k
-    M = cv2.getRotationMatrix2D((W * 0.5, H * 0.62), 0, z)
-    M[1, 2] += -30 * k
-    img[:] = cv2.warpAffine(CHAMBRE, M, (W, H), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
-    # voile clair en haut pour la lisibilité du titre
-    g = np.clip(1 - np.arange(H, dtype=np.float32) / 620, 0, 1)[:, None, None] ** 1.5 * 0.55
-    img[:] = img * (1 - g) + np.asarray(BG, np.float32) * g
-
-def card_chambre(img, t, E):
-    t0 = o(16.45)
-    chambre_bg(img, t, t0, o(19.10) - t0 + TRANS)
-    label(img, t, t0 + 0.05, 'LOCATION COURTE DURÉE')
-    title(img, t, t0 + 0.1, [[('Location', INK)], [('courte durée.', SAGE)]])
 
 def card_fin(img, t, E):
     t0 = T_END
@@ -885,7 +860,13 @@ def render_scene(sc, t, frames, E, chunks, thumbs, ts_max=None, face_text=True):
         draw_face(img, frames, t, ts, zoom=FACE_ZOOM['face_pierre'], chunks=chunks if t < T_END else None, face_text=face_text)
         pop_name(img, t, o(4.84))
     elif kind.startswith('face_'):
-        draw_face(img, frames, t, ts, chunks=chunks if t < T_END else None, face_text=face_text)
+        draw_face(img, frames, t, ts, zoom=ZOOM_SIMPLE, chunks=chunks if t < T_END else None, face_text=face_text)
+        if kind == 'face_debut':
+            pop_name(img, t, o(4.84), until=o(7.0))
+        if kind == 'face_milieu':
+            pop_logo(img, t, o(12.95), 'airbnb', 90, W / 2, 200, 'center', until=o(15.5))
+            pop_logo(img, t, o(16.62), 'airbnb', 90, W / 2 - 250, 200, 'center', until=o(19.2))
+            pop_logo(img, t, o(16.95), 'booking', 70, W / 2 + 230, 210, 'center', until=o(19.2))
         if kind == 'face_lcd':          # « location courte durée » : les plateformes
             pop_logo(img, t, o(16.62), 'airbnb', 104, W / 2, 190, 'center')
             pop_logo(img, t, o(16.95), 'booking', 80, W / 2, 420, 'center')

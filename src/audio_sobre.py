@@ -37,7 +37,8 @@ def main(voice_wav, sfx_dir, out_wav):
     if not os.environ.get('SANS_PASTILLES'):
         for x in (9.15, 16.6, 24.98, 32.74): put('pop_hi', o(x), 0.12)               # pastilles (version 3)
     if os.environ.get('MODE') == 'ref':
-        for x in (27.35, 27.85, 28.35): put('pop_hi', o(x), 0.10)                     # checklist (v7+)
+        if not os.environ.get('SIMPLE'):
+            for x in (27.35, 27.85, 28.35): put('pop_hi', o(x), 0.10)                 # checklist (v7-v9)
         for x in (12.95, 16.62, 16.95): put('pop', o(x), 0.14)                        # logos Airbnb / Booking
     else:
         for x in (29.85, 30.45, 31.05): put('pop_hi', o(x), 0.10)                     # checklist

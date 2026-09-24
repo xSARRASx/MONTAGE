@@ -1,6 +1,16 @@
 # MONTAGE — Vidéo Masterclass conciergerie (verticale 9:16)
 
-## Version 9 — la plus aboutie (recommandée) : `output/montage_v9.mp4`
+## Version 10 — simple (recommandée) : `output/montage_v10.mp4`
+
+Demande : moins d'effets, beaucoup plus de Pierre, pas de gros carré vert.
+- **Pierre presque tout le temps**, cadrage serré qui laisse hors champ le logo, le titre et les anciens bandeaux.
+- **Sous-titres blancs** avec une ombre douce et floue (plus de pastille pleine), sur une ligne.
+- **Seulement 2 cartes** : la chaîne YouTube de Sébastien MORE (« 10 ans », « +1 500 vidéos ») et la masterclass
+  (Sébastien en vidéo sur l'ordinateur), puis l'écran de fin.
+- Petits rappels discrets : prénom « Pierre », logos Airbnb / Booking.com qui apparaissent puis disparaissent.
+- Supprimé : contrats 3D, carte « Pierre & son père », photo des clés, calculatrice, checklist, la plupart des bruitages.
+
+## Version 9 : `output/montage_v9.mp4`
 
 Tout ce qui est décrit en version 8, plus (revue qualité v8) :
 - **Une pastille stable par phrase** : même taille et même place du début à la fin de la phrase (union de toutes
