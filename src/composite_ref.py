@@ -41,8 +41,7 @@ SCENES = [
     ('face_hook', 0.00, 0.95),
     ('contrats', 0.95, 4.45),
     ('equipe', 4.45, 8.25),
-    ('face_10ans', 8.25, 9.85),
-    ('videos', 9.85, 12.30),
+    ('chaine', 8.25, 12.30),
     ('conciergerie', 12.30, 16.45),
     ('chambre', 16.45, 19.10),
     ('commission', 19.10, 23.40),
@@ -385,35 +384,82 @@ def card_equipe(img, t, E):
         put_text(img, [(big, SAGE)], 800, 150, 74, y + dy, op)
         put_text(img, [(small, INK)], 600, 38, 80, y + 190 + dy, op)
 
-def card_videos(img, t, E, thumbs):
-    t0 = o(9.85)
+YT_ROUGE = (1.0, 0.0, 0.2)
+
+def yt_logo(img, x, y, h, op=1.0):
+    """Petit logo lecture YouTube (rectangle rouge arrondi + triangle blanc)."""
+    w = int(h * 1.42)
+    fill_rrect(img, x, y, w, h, int(h * 0.28), YT_ROUGE, op)
+    cx, cy = x + w / 2 + h * 0.04, y + h / 2
+    lay = img.copy()
+    tri = np.array([[cx - h * 0.17, cy - h * 0.21], [cx - h * 0.17, cy + h * 0.21], [cx + h * 0.22, cy]], np.int32)
+    cv2.fillPoly(lay, [tri], (1.0, 1.0, 1.0), cv2.LINE_AA)
+    img[:] = img * (1 - op) + lay * op
+    return w
+
+def rounded_img(im, r):
+    return np.concatenate([im, rrect_mask(im.shape[1], im.shape[0], r)[..., None]], 2)
+
+def card_chaine(img, t, E, YT):
+    """Carte « chaîne YouTube de Sébastien MORE » : profil, 10 ans → 1 500 vidéos, vraies miniatures."""
+    t0 = o(8.25)
     label(img, t, t0, 'LA CHAÎNE YOUTUBE')
-    k = ease_out((t - o(9.95)) / (o(10.8) - o(9.95)))
-    n = int(round(1500 * k / 10) * 10)
-    title(img, t, t0 + 0.05, [[('{:,}'.format(n).replace(',', ' '), INK), (' vidéos.', INK)]])
-    op, dy = appear(t, o(11.2))
-    put_text(img, [('publiées sur YouTube', SAGE)], 800, 56, 78, 312 + dy, op)
-    # mosaïque de vignettes (extraits de la vidéo) qui apparaissent en cascade
-    tw, th, gap = 300, 169, 20
-    for i, th_im in enumerate(thumbs):
-        r, c = divmod(i, 3)
-        tt = o(9.95) + 0.05 * i
-        kk = ease_out_back((t - tt) / 0.35, 1.3)
-        if t < tt: continue
-        x = 70 + c * (tw + gap); y = 470 + r * (th + gap)
-        sc = 0.85 + 0.15 * kk
-        w2, h2 = int(tw * sc), int(th * sc)
-        im = cv2.resize(th_im, (w2, h2), interpolation=cv2.INTER_AREA)
-        m = rrect_mask(w2, h2, 16)[..., None]
-        rgba = np.concatenate([im, m], 2)
-        soft_shadow(img, x + (tw - w2) / 2, y + (th - h2) / 2, w2, h2, 16, 0.10 * clamp(kk), 12, 6)
-        blit(img, rgba, x + (tw - w2) / 2, y + (th - h2) / 2, clamp(kk))
-        # petit bouton lecture
-        cx, cy = x + tw / 2, y + th / 2
-        if kk > 0.5:
-            cv2.circle(img, (int(cx), int(cy)), 26, tuple(float(v) for v in CREAM), -1, cv2.LINE_AA)
-            tri = np.array([[cx - 8, cy - 12], [cx - 8, cy + 12], [cx + 13, cy]], np.int32)
-            cv2.fillPoly(img, [tri], tuple(float(v) for v in SAGE), cv2.LINE_AA)
+    # en-tête profil
+    op, dy = appear(t, t0 + 0.08)
+    ax, ay, ar = 80, 212 + dy, 46
+    av = YT['avatar_rond']
+    blit(img, av, ax, ay, op)
+    put_text(img, [(YT['nom'], INK)], 800, 40, ax + 2 * ar + 22, ay + 4, op)
+    put_text(img, [(YT['handle'], MUTED)], 600, 28, ax + 2 * ar + 22, ay + 54, op)
+    lw = yt_logo(img, W - 80 - 62, ay + 22, 44, op)
+    # titre : « 10 ans d'accompagnement. » puis « 1 500 vidéos. »
+    swap = o(10.25)
+    if t < swap:
+        if t >= o(9.1):
+            title(img, t, o(9.1), [[('10 ans', SAGE)], [("d'accompagnement.", INK)]], y=345)
+    else:
+        k = ease_out((t - swap) / (o(10.8) - swap))
+        n = int(round(1500 * k / 10) * 10)
+        title(img, t, swap, [[('{:,}'.format(n).replace(',', ' '), SAGE), (' vidéos.', INK)]], y=345)
+        op2, dy2 = appear(t, o(10.9))
+        put_text(img, [(YT['abonnes'], MUTED)], 700, 38, 80, 455 + dy2, op2)
+    # grande miniature « à la une » qui change + deux bandes qui défilent
+    thumbs_big, thumbs_small = YT['grandes'], YT['petites']
+    op3, dy3 = appear(t, t0 + 0.25, 0.6)
+    fw, fh, fx, fy = 920, 518, 80, 540
+    per = 0.95
+    j = int(max(0.0, t - t0 - 0.25) / per)
+    frac = (max(0.0, t - t0 - 0.25) % per) / per
+    cur = thumbs_big[j % len(thumbs_big)]; nxt = thumbs_big[(j + 1) % len(thumbs_big)]
+    kz = 1.0 + 0.04 * frac
+    def kb(im):
+        h_, w_ = im.shape[:2]; cw, ch = int(w_ / kz), int(h_ / kz)
+        x0, y0 = (w_ - cw) // 2, (h_ - ch) // 2
+        return cv2.resize(im[y0:y0 + ch, x0:x0 + cw], (fw, fh), interpolation=cv2.INTER_AREA)
+    feat = kb(cur)
+    if frac > 0.82:
+        a_ = ease_in_out((frac - 0.82) / 0.18)
+        feat = feat * (1 - a_) + cv2.resize(nxt, (fw, fh), interpolation=cv2.INTER_AREA) * a_
+    soft_shadow(img, fx, fy + dy3, fw, fh, 26, 0.28 * op3, 26, 20)
+    blit(img, rounded_img(feat.astype(np.float32), 26), fx, fy + dy3, op3)
+    # badge lecture au centre de la miniature
+    lay = img.copy(); cx, cy = fx + fw / 2, fy + dy3 + fh / 2
+    fill_rrect(lay, cx - 48, cy - 34, 96, 68, 18, YT_ROUGE, 0.92)
+    tri = np.array([[cx - 12, cy - 16], [cx - 12, cy + 16], [cx + 18, cy]], np.int32)
+    cv2.fillPoly(lay, [tri], (1.0, 1.0, 1.0), cv2.LINE_AA)
+    img[:] = img * (1 - op3) + lay * op3
+    # deux rangées de petites miniatures qui défilent en sens opposé
+    tw, th_, gap = 280, 158, 18
+    for row in range(2):
+        yb = 1098 + row * (th_ + gap)
+        op4, dy4 = appear(t, t0 + 0.35 + 0.1 * row, 0.6)
+        speed = 70 if row == 0 else -70
+        off = ((t - t0) * speed) % (tw + gap)
+        seq = thumbs_small[row::2]
+        for i in range(-1, 5):
+            x = 80 + i * (tw + gap) - off if speed > 0 else 80 + i * (tw + gap) + off - (tw + gap)
+            im = seq[(i + 20) % len(seq)]
+            blit(img, im, x, yb + dy4, op4)
 
 def card_conciergerie(img, t, E):
     t0 = o(12.30)
@@ -536,7 +582,7 @@ def render_scene(sc, t, frames, E, chunks, thumbs):
     elif kind == 'chambre': card_chambre(img, t, E)
     elif kind == 'contrats': card_contrats(img, t, E)
     elif kind == 'equipe': card_equipe(img, t, E)
-    elif kind == 'videos': card_videos(img, t, E, thumbs)
+    elif kind == 'chaine': card_chaine(img, t, E, thumbs)
     elif kind == 'conciergerie': card_conciergerie(img, t, E)
     elif kind == 'commission': card_commission(img, t, E)
     elif kind == 'masterclass': card_masterclass(img, t, E)
@@ -549,6 +595,26 @@ def render_scene(sc, t, frames, E, chunks, thumbs):
         put_text(img, [('locationcourteduree.fr', (0.55, 0.58, 0.55) if dark else MUTED)], 600, 26, W / 2, 1810, 0.9, 'center', 1)
     return img
 
+def load_chaine():
+    """Charge assets/youtube : chaine.json, avatar.jpg, thumbs/*.jpg (miniatures réelles de la chaîne)."""
+    d = os.path.join(ROOT, 'assets', 'youtube')
+    info = json.load(open(os.path.join(d, 'chaine.json'), encoding='utf-8'))
+    av = cv2.imread(os.path.join(d, 'avatar.jpg'))[..., ::-1].astype(np.float32) / 255
+    side = min(av.shape[:2]); av = av[(av.shape[0] - side) // 2:(av.shape[0] + side) // 2, (av.shape[1] - side) // 2:(av.shape[1] + side) // 2]
+    av = cv2.resize(av, (92, 92), interpolation=cv2.INTER_AREA)
+    m = np.zeros((368, 368), np.uint8); cv2.circle(m, (184, 184), 184, 255, -1, cv2.LINE_AA)
+    m = cv2.resize(m, (92, 92), interpolation=cv2.INTER_AREA).astype(np.float32)[..., None] / 255
+    grandes, petites = [], []
+    for f in info['miniatures']:
+        im = cv2.imread(os.path.join(d, 'thumbs', f))
+        if im is None: continue
+        im = im[..., ::-1].astype(np.float32) / 255
+        grandes.append(cv2.resize(im, (1000, 563), interpolation=cv2.INTER_AREA))
+        sm = cv2.resize(im, (280, 158), interpolation=cv2.INTER_AREA)
+        petites.append(np.concatenate([sm, rrect_mask(280, 158, 14)[..., None]], 2))
+    return dict(nom=info['nom'], handle=info['handle'], abonnes=info['abonnes'],
+                avatar_rond=np.concatenate([av, m], 2), grandes=grandes[:info.get('nb_une', 5)], petites=petites)
+
 def main():
     src, d3 = sys.argv[1], sys.argv[2]
     only = [int(v) for v in sys.argv[3].split(',')] if len(sys.argv) > 3 else None
@@ -560,16 +626,7 @@ def main():
     words = json.load(open(os.path.join(os.path.dirname(src), 'words.json')))
     chunks = build_chunks(words)
     E = {n: Seq(os.path.join(d3, n)) for n in ('contracts', 'house', 'split')}
-    # vignettes « vidéos » : 15 extraits des plans visage
-    thumbs = []
-    for i, ts in enumerate(np.linspace(3.2, 34.5, 40)):
-        if any(a <= ts < b for a, b in ((4.5, 8.2), (12.3, 16.4), (19.2, 23.3), (25.2, 29.4))): continue
-        f = frames[int(ts * 30)][300:300 + 270, :]
-        f = cv2.resize(f, (300, 169), interpolation=cv2.INTER_AREA)[..., ::-1].astype(np.float32) / 255
-        lum = f @ np.array([0.299, 0.587, 0.114], np.float32)
-        f = lum[..., None] * 0.35 + f * 0.65
-        thumbs.append(np.clip(f * 0.92 + 0.06, 0, 1))
-        if len(thumbs) == 15: break
+    thumbs = load_chaine()
     rng = np.random.default_rng(1)
     grain = [cv2.GaussianBlur(rng.normal(0, 1, (H, W)).astype(np.float32), (0, 0), 0.8)[..., None] * 0.012 for _ in range(4)]
     starts = [o(a) for _, a, _ in SCENES]

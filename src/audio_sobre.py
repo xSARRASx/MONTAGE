@@ -2,7 +2,10 @@
 import sys, os, wave, numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from composite import KEEP, src_to_out
-from composite_sobre import SCENES, DUR, T_END
+if os.environ.get('MODE') == 'ref':          # version 4+ : scènes de composite_ref.py
+    from composite_ref import SCENES, DUR, T_END
+else:
+    from composite_sobre import SCENES, DUR, T_END
 from audio import load
 
 SR = 44100
@@ -34,7 +37,8 @@ def main(voice_wav, sfx_dir, out_wav):
     if not os.environ.get('SANS_PASTILLES'):
         for x in (9.15, 16.6, 24.98, 32.74): put('pop_hi', o(x), 0.12)               # pastilles (version 3)
     for x in (29.85, 30.45, 31.05): put('pop_hi', o(x), 0.10)                         # checklist
-    for f in range(0, 26, 3): put('tick', o(9.95) + f / 30, 0.08)                     # compteur vidéos
+    t_cpt = o(10.25) if os.environ.get('MODE') == 'ref' else o(9.95)
+    for f in range(0, int((o(10.8) - t_cpt) * 30) + 1, 3): put('tick', t_cpt + f / 30, 0.08)   # compteur vidéos
     put('ding', o(10.8), 0.10); put('ding', T_END + 0.1, 0.12)
     mix = np.tanh(mix * 1.05) / np.tanh(1.05)
     with wave.open(out_wav, 'wb') as w:
