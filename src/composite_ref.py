@@ -220,7 +220,7 @@ def build_chunks(words):
             toks.append([a, b, w.strip()])
     for t in toks:
         t[2] = t[2].replace('AirBnb', 'Airbnb').replace('1500', '1 500').replace('Youtube', 'YouTube')
-        t[2] = t[2].replace('courte-durée', 'courte\u00a0durée')
+        t[2] = t[2].replace('courte-durée', 'courte\u00a0durée').replace('Masterclass', 'masterclass')
         if t[2].endswith('%') and len(t[2]) > 1: t[2] = t[2][:-1] + '\u00a0%'
     chunks, cur = [], []
     for tk in toks:
@@ -267,8 +267,58 @@ def subtitles_video(img, ts, chunks, y=1592):
             blit(img, rg, x - pad, yy_ - pad + 4, k)
             blit(img, im, x, yy_, k)
 
+PILL = (0.105, 0.125, 0.112)
+def split_two(words_):
+    """Coupe une phrase en deux lignes de largeurs proches."""
+    best, cut = 1e9, 1
+    for c in range(1, len(words_)):
+        l1 = len(' '.join(words_[:c])); l2 = len(' '.join(words_[c:]))
+        if max(l1, l2) < best: best, cut = max(l1, l2), c
+    return [list(range(0, cut)), list(range(cut, len(words_)))]
+
+def pill_subtitles(img, ts, chunks, rects, with_text=True):
+    """Sous-titres du plan visage : pastilles sombres arrondies posées exactement sur l'ancienne boîte,
+    texte blanc, mot-clé vert clair. Sans ancienne boîte à l'image : texte blanc avec ombre."""
+    cur = None
+    for c in chunks:
+        if c[0] - 0.02 <= ts < c[1]: cur = c
+    if cur is None and rects:          # ancienne boîte visible entre deux phrases : on garde la dernière
+        prev = [c for c in chunks if c[0] <= ts]
+        cur = prev[-1] if prev else chunks[0]
+    if cur is None: return
+    a, b_, words_, hl = cur
+    k = (1.0 if a < 0.05 else ease_out(clamp((ts - a) / 0.12))) if with_text else 0.0
+    if not rects:
+        if with_text: subtitles_video(img, ts, chunks)
+        return
+    # une seule pastille couvrant toutes les lignes de l'ancienne boîte
+    r = (min(q[0] for q in rects), min(q[1] for q in rects), max(q[2] for q in rects), max(q[3] for q in rects))
+    echelle = (rects[0][3] - rects[0][1]) / max(1, rects[0][4])       # px sortie par px du rush
+    h_src = (r[3] - r[1]) / max(1e-6, echelle)
+    two = h_src > 78 and len(words_) >= 2                   # 1 ligne ≈ 55-65 px dans le rush, 2 lignes ≈ 105 px
+    lines = split_two(words_) if two else [list(range(len(words_)))]
+    size = 58
+    ims = [text_img(tuple((words_[j] + (' ' if j != idx[-1] else ''), SAGE_L if j == hl else (1.0, 1.0, 1.0)) for j in idx), 800, size)
+           for idx in lines]
+    tw = max(im.shape[1] for im in ims); lh = ims[0].shape[0]
+    cx = (r[0] + r[2]) / 2
+    x0 = min(r[0] - 10, cx - tw / 2 - 36); x1 = max(r[2] + 10, cx + tw / 2 + 36)
+    y0, y1 = r[1] - 10, r[3] + 10
+    need = lh * len(lines) + 24
+    if (y1 - y0) < need:
+        c_ = (y0 + y1) / 2; y0, y1 = c_ - need / 2, c_ + need / 2
+    pw, ph = int(x1 - x0), int(y1 - y0)
+    rad = min(28, ph // 2)
+    soft_shadow(img, x0, y0, pw, ph, rad, 0.22, 16, 8)
+    fill_rrect(img, x0, y0, pw, ph, rad, PILL, 1.0)
+    if with_text and k > 0:
+        tot = lh * len(ims) + (len(ims) - 1) * 4
+        ty = (y0 + y1) / 2 - tot / 2 - 2 + (1 - k) * 6
+        for im in ims:
+            blit(img, im, cx - im.shape[1] / 2, ty, k); ty += lh + 4
+
 _halo = {}
-def subtitles(img, ts, chunks, dark=False, y=1500, halo=False):
+def subtitles(img, ts, chunks, dark=False, y=1540, halo=False):
     for (a, b, words_, hl) in chunks:
         if a - 0.02 <= ts < b:
             k = clamp((ts - a) / 0.12)
@@ -362,6 +412,13 @@ def subtitle_mask(f):
     mask[782:794, 18:462] = 255          # la fine barre grise est toujours à cet endroit
     return mask
 
+def old_box_rects(mask):
+    """Rectangles (x0, y0, x1, y1) de chaque ligne de l'ancien sous-titre, triés de haut en bas."""
+    m = mask.copy(); m[766:] = 0
+    n, lab, st, _ = cv2.connectedComponentsWithStats((m > 0).astype(np.uint8))
+    rects = [(x, y, x + w, y + h) for (x, y, w, h, area) in st[1:] if area > 300 and h > 12]
+    return sorted(rects, key=lambda r: r[1])
+
 def clean_frame(frames, si):
     """Efface les anciens sous-titres et la barre de progression (inpainting sur un masque serré)."""
     if si in _inp: return _inp[si]
@@ -380,7 +437,7 @@ def clean_frame(frames, si):
 S0 = H / 848
 BOTTOM_SHADE = np.clip((np.arange(H, dtype=np.float32) - 1080) / 700, 0, 1)[:, None, None] ** 1.05 * 0.78
 
-def draw_face(img, frames, t, ts, zoom=1.18):
+def draw_face(img, frames, t, ts, zoom=1.18, chunks=None, face_text=True):
     si = min(len(frames) - 1, int(round(ts * 30)))
     f, emask = clean_frame(frames, si)
     start, idx = shot_start(ts)
@@ -396,11 +453,15 @@ def draw_face(img, frames, t, ts, zoom=1.18):
     lum = im @ np.array([0.299, 0.587, 0.114], np.float32)
     im = lum[..., None] + (im - lum[..., None]) * 0.93
     im = np.clip((im - 0.5) * 1.07 + 0.5 + np.array([0.012, 0.004, -0.010], np.float32), 0, 1)
-    # ombre douce posée exactement sur la zone effacée : elle sert de « lit » aux nouveaux sous-titres
-    em = cv2.warpAffine(emask.astype(np.float32) / 255, M, (W, H), flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP)
-    em = cv2.GaussianBlur(cv2.dilate(em, np.ones((31, 61), np.uint8)), (0, 0), 26)
-    shade = np.maximum(BOTTOM_SHADE[..., 0], np.clip(em, 0, 1) * 0.52)[..., None]
-    img[:] = im * (1 - shade)
+    img[:] = im * (1 - BOTTOM_SHADE)
+    # l'ancienne boîte de sous-titre est recouverte par la nouvelle pastille (même place, même taille) :
+    # là où elle cachait déjà le bas de la bouche dans le rush, rien n'est inventé ni flouté.
+    rects = []
+    for (x0, y0, x1, y1) in old_box_rects(emask):
+        p0 = (np.array([x0, y0], float) - A) * s + P; p1 = (np.array([x1, y1], float) - A) * s + P
+        rects.append((p0[0], p0[1], p1[0], p1[1], y1 - y0))      # dernier champ : hauteur dans le rush
+    if chunks is not None:
+        pill_subtitles(img, ts, chunks, rects, face_text)
 
 # ------------------------------------------------------------------ photos réelles (Unsplash) et écran du père
 YY_, XX_ = np.mgrid[0:H, 0:W].astype(np.float32)
@@ -704,7 +765,7 @@ def card_masterclass(img, t, E):
     title(img, t, t0 + 0.05, [[('Une masterclass', INK)]])
     op, dy = appear(t, o(28.1))
     put_text(img, [('100\u00a0% gratuite.', SAGE)], 800, 86, 76, 301 + dy, op)
-    items = [(o(27.95), "Comment fonctionne l'activité"), (o(28.45), 'Comment lancer ta conciergerie'), (o(28.95), 'Comment obtenir des résultats')]
+    items = [(o(27.35), "Comment fonctionne l'activité"), (o(27.85), 'Comment lancer ta conciergerie'), (o(28.35), 'Comment obtenir des résultats')]
     if t >= items[0][0] - 0.2:
         opp = clamp((t - items[0][0] + 0.2) / 0.3)
         soft_shadow(img, 60, 1180, 960, 262, 34, 0.18 * opp, 22, 14)
@@ -763,7 +824,7 @@ def card_fin(img, t, E):
     if op4 > 0: info_pill(img, [('100\u00a0% gratuite · clique autour de la vidéo', INK)], 76, 1400 + dy4, op4, 30)
 
 # ------------------------------------------------------------------ rendu d'une scène
-def render_scene(sc, t, frames, E, chunks, thumbs, ts_max=None):
+def render_scene(sc, t, frames, E, chunks, thumbs, ts_max=None, face_text=True):
     """Rend une scène SANS sous-titres (ils sont posés une seule fois après les transitions).
     ts_max : fige la vidéo source (plan sortant d'une transition, pour ne jamais montrer la suite du rush)."""
     kind, a, b = sc
@@ -773,12 +834,12 @@ def render_scene(sc, t, frames, E, chunks, thumbs, ts_max=None):
     img = (BG_DARK if dark else BG_LIGHT).copy()
     t0 = o(a)
     if kind == 'face_hook':
-        draw_face(img, frames, t, ts, zoom=1.42)
+        draw_face(img, frames, t, ts, zoom=1.42, chunks=chunks if t < T_END else None, face_text=face_text)
     elif kind == 'face_pierre':         # zoom serré : le haut du rush (ancien bandeau) reste hors cadre
-        draw_face(img, frames, t, ts, zoom=1.60)
+        draw_face(img, frames, t, ts, zoom=1.60, chunks=chunks if t < T_END else None, face_text=face_text)
         pop_name(img, t, o(4.84))
     elif kind.startswith('face_'):
-        draw_face(img, frames, t, ts)
+        draw_face(img, frames, t, ts, chunks=chunks if t < T_END else None, face_text=face_text)
         if kind == 'face_lcd':          # « location courte durée » : les plateformes
             pop_logo(img, t, o(16.62), 'airbnb', 104, W / 2, 190, 'center')
             pop_logo(img, t, o(16.95), 'booking', 80, W / 2, 420, 'center')
@@ -841,20 +902,23 @@ def main():
     for fi in (range(NFR) if only is None else only):
         t = fi / FPS
         i = max(j for j, s in enumerate(starts) if s <= t + 1e-9)
-        img = render_scene(SCENES[i], t, frames, E, chunks, thumbs)
-        if i > 0 and t - starts[i] < TRANS:
-            k = ease_in_out((t - starts[i]) / TRANS)
+        trans = i > 0 and t - starts[i] < TRANS
+        kk = ease_in_out((t - starts[i]) / TRANS) if trans else 1.0
+        img = render_scene(SCENES[i], t, frames, E, chunks, thumbs, face_text=kk >= 0.5)
+        if trans:
+            k = kk
             pk, pa, pb = SCENES[i - 1]
             prev = render_scene(SCENES[i - 1], t, frames, E, chunks, thumbs,
-                                ts_max=(pb - 1 / 30) if pk.startswith('face_') else None)
+                                ts_max=(pb - 1 / 30) if pk.startswith('face_') else None, face_text=kk < 0.5)
             # la nouvelle scène glisse légèrement vers le haut par-dessus l'ancienne
             dy = int(70 * (1 - k))
             new = np.concatenate([img[dy:], np.repeat(img[-1:], dy, 0)]) if dy else img
             img = prev * (1 - k) + new * k
         dominante = SCENES[i]
-        if i > 0 and t - starts[i] < TRANS and (t - starts[i]) / TRANS < 0.5:
+        if trans and (t - starts[i]) / TRANS < 0.5:
             dominante = SCENES[i - 1]
-        draw_subs(img, dominante, t, chunks)
+        if not dominante[0].startswith('face_'):      # les plans visage portent déjà leurs sous-titres
+            draw_subs(img, dominante, t, chunks)
         if t > DUR - 0.25:
             img = img * clamp((DUR - t) / 0.25) + np.asarray(BG) * (1 - clamp((DUR - t) / 0.25))
         img = img + grain[fi % 4]

@@ -1,6 +1,14 @@
 # MONTAGE — Vidéo Masterclass conciergerie (verticale 9:16)
 
-## Version 7 — la plus aboutie (recommandée) : `output/montage_v7.mp4`
+## Version 8 — la plus aboutie (recommandée) : `output/montage_v8.mp4`
+
+Tout ce qui est décrit en version 7, plus :
+- **Sous-titres des plans de Pierre dans des pastilles sombres arrondies**, posées exactement sur l'emplacement et la
+  taille de l'ancienne boîte (une ou deux lignes). Là où l'ancien sous-titre cachait déjà le bas de la bouche dans le
+  rush, plus rien n'est flouté ni inventé : bouche et menton propres sur toute la vidéo.
+- Checklist de la masterclass lisible (chaque point reste au moins 1 s), « masterclass » écrit partout pareil.
+
+## Version 7 : `output/montage_v7.mp4`
 
 Tout ce qui est décrit en version 6, plus :
 - **Sébastien MORE en vraie vidéo** sur l'écran de l'ordinateur (extraits de son compte TikTok « moresebastien »,
