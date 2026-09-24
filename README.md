@@ -1,5 +1,18 @@
 # MONTAGE — Vidéo Masterclass conciergerie (verticale 9:16)
 
+## Version 4 — au plus proche de la référence (recommandée) : `output/montage_v4.mp4`
+
+- **Visage plein écran** : les anciens sous-titres, la barre de progression et le logo sont effacés
+  (reconstruction de l'image + léger zoom), comme dans la vidéo de référence.
+- **Sous-titres blancs** posés sur la vidéo, ombre douce, un mot-clé en vert clair.
+- **Fond photo** : chambre photoréaliste rendue en 3D (lit, oreillers, rideaux voilés, lumière du jour)
+  pour « Location courte durée » et l'écran de fin (« Ta conciergerie. Lance-toi. » + bouton).
+- Cartes beige et 3D de la version 3 (contrats signés, maison, bloc 25 %, masterclass sombre).
+
+Scripts : `src/composite_ref.py`, `src/render_chambre.py`, `src/audio_sobre.py` (avec `SANS_PASTILLES=1`).
+
+---
+
 ## Version 3 — style sobre (recommandée) : `output/montage_sobre.mp4`
 
 Inspirée du *principe* de la vidéo de référence (épuré, beige / blanc papier / vert sauge, cartes plein écran,

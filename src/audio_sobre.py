@@ -31,7 +31,8 @@ def main(voice_wav, sfx_dir, out_wav):
         put('whoosh_soft', src_to_out(a) - 0.12, 0.10)
     o = src_to_out
     for i in range(3): put('pop', o(0.95) + (58 + 7 * i) / 30, 0.16)                  # tampons « signé »
-    for x in (9.15, 16.6, 24.98, 32.74): put('pop_hi', o(x), 0.12)                   # pastilles
+    if not os.environ.get('SANS_PASTILLES'):
+        for x in (9.15, 16.6, 24.98, 32.74): put('pop_hi', o(x), 0.12)               # pastilles (version 3)
     for x in (29.85, 30.45, 31.05): put('pop_hi', o(x), 0.10)                         # checklist
     for f in range(0, 26, 3): put('tick', o(9.95) + f / 30, 0.08)                     # compteur vidéos
     put('ding', o(10.8), 0.10); put('ding', T_END + 0.1, 0.12)
