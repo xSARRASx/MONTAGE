@@ -277,40 +277,41 @@ def split_two(words_):
     return [list(range(0, cut)), list(range(cut, len(words_)))]
 
 def pill_subtitles(img, ts, chunks, rects, with_text=True):
-    """Sous-titres du plan visage : pastilles sombres arrondies posées exactement sur l'ancienne boîte,
-    texte blanc, mot-clé vert clair. Sans ancienne boîte à l'image : texte blanc avec ombre."""
-    cur = None
-    for c in chunks:
-        if c[0] - 0.02 <= ts < c[1]: cur = c
-    if cur is None and rects:          # ancienne boîte visible entre deux phrases : on garde la dernière
-        prev = [c for c in chunks if c[0] <= ts]
-        cur = prev[-1] if prev else chunks[0]
-    if cur is None: return
-    a, b_, words_, hl = cur
+    """Sous-titres du plan visage : une pastille sombre arrondie par phrase, de taille et de place FIXES
+    (couvre toutes les positions de l'ancienne boîte pendant la phrase), texte blanc, mot-clé vert clair.
+    Si l'ancienne boîte sort du cadre, la pastille devient une bande pleine largeur pour toute la phrase."""
+    ci = chunk_index(ts, chunks)
+    if ci is None: return
+    a, b_, words_, hl = chunks[ci]
+    if ts >= b_ and not rects and ci not in PILLS: return
     k = (1.0 if a < 0.05 else ease_out(clamp((ts - a) / 0.12))) if with_text else 0.0
-    if not rects:
-        if with_text: subtitles_video(img, ts, chunks)
+    if ci in PILLS:
+        x0, y0, x1, y1, two, band = PILLS[ci]
+    elif rects:
+        x0 = min(q[0] for q in rects); y0 = min(q[1] for q in rects); x1 = max(q[2] for q in rects); y1 = max(q[3] for q in rects)
+        ech = (rects[0][3] - rects[0][1]) / max(1, rects[0][4]); two = (y1 - y0) / max(1e-6, ech) > 78
+        band = x0 < 24 or x1 > W - 24
+    else:
+        if with_text and ts < b_: subtitles_video(img, ts, chunks)
         return
-    # une seule pastille couvrant toutes les lignes de l'ancienne boîte
-    r = (min(q[0] for q in rects), min(q[1] for q in rects), max(q[2] for q in rects), max(q[3] for q in rects))
-    echelle = (rects[0][3] - rects[0][1]) / max(1, rects[0][4])       # px sortie par px du rush
-    h_src = (r[3] - r[1]) / max(1e-6, echelle)
-    two = h_src > 78 and len(words_) >= 2                   # 1 ligne ≈ 55-65 px dans le rush, 2 lignes ≈ 105 px
+    two = two and len(words_) >= 2
     lines = split_two(words_) if two else [list(range(len(words_)))]
-    size = 58
-    ims = [text_img(tuple((words_[j] + (' ' if j != idx[-1] else ''), SAGE_L if j == hl else (1.0, 1.0, 1.0)) for j in idx), 800, size)
+    ims = [text_img(tuple((words_[j] + (' ' if j != idx[-1] else ''), SAGE_L if j == hl else (1.0, 1.0, 1.0)) for j in idx), 800, 58)
            for idx in lines]
     tw = max(im.shape[1] for im in ims); lh = ims[0].shape[0]
-    cx = (r[0] + r[2]) / 2
-    x0 = min(r[0] - 10, cx - tw / 2 - 36); x1 = max(r[2] + 10, cx + tw / 2 + 36)
-    y0, y1 = r[1] - 10, r[3] + 10
+    y0, y1 = y0 - 10, y1 + 10
     need = lh * len(lines) + 24
     if (y1 - y0) < need:
         c_ = (y0 + y1) / 2; y0, y1 = c_ - need / 2, c_ + need / 2
+    if band:
+        x0, x1, rad, cx = -40, W + 40, 0, W / 2
+    else:
+        cx = (x0 + x1) / 2
+        x0 = min(x0 - 10, cx - tw / 2 - 36); x1 = max(x1 + 10, cx + tw / 2 + 36)
+        rad = min(28, int(y1 - y0) // 2)
     pw, ph = int(x1 - x0), int(y1 - y0)
-    rad = min(28, ph // 2)
-    soft_shadow(img, x0, y0, pw, ph, rad, 0.22, 16, 8)
-    fill_rrect(img, x0, y0, pw, ph, rad, PILL, 1.0)
+    if not band: soft_shadow(img, x0, y0, pw, ph, rad, 0.22, 16, 8)
+    fill_rrect(img, x0, y0, pw, ph, max(rad, 1), PILL, 1.0)
     if with_text and k > 0:
         tot = lh * len(ims) + (len(ims) - 1) * 4
         ty = (y0 + y1) / 2 - tot / 2 - 2 + (1 - k) * 6
@@ -437,15 +438,63 @@ def clean_frame(frames, si):
 S0 = H / 848
 BOTTOM_SHADE = np.clip((np.arange(H, dtype=np.float32) - 1080) / 700, 0, 1)[:, None, None] ** 1.05 * 0.78
 
-def draw_face(img, frames, t, ts, zoom=1.18, chunks=None, face_text=True):
-    si = min(len(frames) - 1, int(round(ts * 30)))
-    f, emask = clean_frame(frames, si)
+def face_geom(ts, zoom):
+    """Échelle et points d'ancrage du plan visage : sortie p -> source q = A + (p - P) / s."""
     start, idx = shot_start(ts)
     z = zoom + (0.04 if idx % 2 else 0.0) + 0.035 * ease_in_out((ts - start) / 4)
     s = S0 * z
-    # sortie p -> source q = A + (p - P) / s   (ancrage sous le visage, pour garder le haut hors du logo)
-    A = np.array([226.0, 636.0]); P = np.array([W / 2, H * 0.75])
+    A = np.array([226.0, 636.0]); P = np.array([W / 2, H * 0.75])     # ancrage sous le visage (logo hors cadre)
     M = np.array([[1 / s, 0, A[0] - P[0] / s], [0, 1 / s, A[1] - P[1] / s]], np.float64)
+    return s, A, P, M
+
+def box_rects_out(mask, s, A, P):
+    out = []
+    for (x0, y0, x1, y1) in old_box_rects(mask):
+        p0 = (np.array([x0, y0], float) - A) * s + P; p1 = (np.array([x1, y1], float) - A) * s + P
+        out.append((p0[0], p0[1], p1[0], p1[1], y1 - y0))
+    return out
+
+FACE_ZOOM = {'face_hook': 1.42, 'face_pierre': 1.60}
+PILLS = {}          # index de phrase -> pastille stable (x0, y0, x1, y1, deux_lignes, bande_pleine_largeur)
+
+def chunk_index(ts, chunks):
+    cur = None
+    for i, c in enumerate(chunks):
+        if c[0] - 0.02 <= ts: cur = i
+    return cur
+
+def precompute_pills(frames, chunks):
+    """Une pastille stable par phrase : union de toutes les positions de l'ancienne boîte pendant la phrase
+    (sur les plans visage). Plus de pastille qui clignote ou qui change de forme au milieu d'une phrase."""
+    acc = {}
+    starts_ = [o(a) for _, a, _ in SCENES]
+    for fi in range(NFR):
+        t = fi / FPS
+        if t >= T_END: break
+        i = max(j for j, s_ in enumerate(starts_) if s_ <= t + 1e-9)
+        kind, a, b = SCENES[i]
+        if not kind.startswith('face_'): continue
+        ts = out_to_src(t)
+        si = min(len(frames) - 1, int(round(ts * 30)))
+        s, A, P, M = face_geom(ts, FACE_ZOOM.get(kind, 1.18))
+        rects = box_rects_out(subtitle_mask(frames[si]), s, A, P)
+        ci = chunk_index(ts, chunks)
+        if ci is None or not rects: continue
+        x0 = min(r[0] for r in rects); y0 = min(r[1] for r in rects); x1 = max(r[2] for r in rects); y1 = max(r[3] for r in rects)
+        ech = (rects[0][3] - rects[0][1]) / max(1, rects[0][4])
+        two = (y1 - y0) / max(1e-6, ech) > 78
+        if ci in acc:
+            q = acc[ci]; acc[ci] = [min(q[0], x0), min(q[1], y0), max(q[2], x1), max(q[3], y1), q[4] or two]
+        else:
+            acc[ci] = [x0, y0, x1, y1, two]
+    for ci, q in acc.items():
+        band = q[0] < 24 or q[2] > W - 24
+        PILLS[ci] = (q[0], q[1], q[2], q[3], q[4], band)
+
+def draw_face(img, frames, t, ts, zoom=1.18, chunks=None, face_text=True):
+    si = min(len(frames) - 1, int(round(ts * 30)))
+    f, emask = clean_frame(frames, si)
+    s, A, P, M = face_geom(ts, zoom)
     im = cv2.warpAffine(f, M, (W, H), flags=cv2.INTER_LANCZOS4 | cv2.WARP_INVERSE_MAP, borderMode=cv2.BORDER_REFLECT)
     im = im[..., ::-1].astype(np.float32) / 255
     bl = cv2.GaussianBlur(im, (0, 0), 1.6)
@@ -456,10 +505,7 @@ def draw_face(img, frames, t, ts, zoom=1.18, chunks=None, face_text=True):
     img[:] = im * (1 - BOTTOM_SHADE)
     # l'ancienne boîte de sous-titre est recouverte par la nouvelle pastille (même place, même taille) :
     # là où elle cachait déjà le bas de la bouche dans le rush, rien n'est inventé ni flouté.
-    rects = []
-    for (x0, y0, x1, y1) in old_box_rects(emask):
-        p0 = (np.array([x0, y0], float) - A) * s + P; p1 = (np.array([x1, y1], float) - A) * s + P
-        rects.append((p0[0], p0[1], p1[0], p1[1], y1 - y0))      # dernier champ : hauteur dans le rush
+    rects = box_rects_out(emask, s, A, P)
     if chunks is not None:
         pill_subtitles(img, ts, chunks, rects, face_text)
 
@@ -834,9 +880,9 @@ def render_scene(sc, t, frames, E, chunks, thumbs, ts_max=None, face_text=True):
     img = (BG_DARK if dark else BG_LIGHT).copy()
     t0 = o(a)
     if kind == 'face_hook':
-        draw_face(img, frames, t, ts, zoom=1.42, chunks=chunks if t < T_END else None, face_text=face_text)
+        draw_face(img, frames, t, ts, zoom=FACE_ZOOM['face_hook'], chunks=chunks if t < T_END else None, face_text=face_text)
     elif kind == 'face_pierre':         # zoom serré : le haut du rush (ancien bandeau) reste hors cadre
-        draw_face(img, frames, t, ts, zoom=1.60, chunks=chunks if t < T_END else None, face_text=face_text)
+        draw_face(img, frames, t, ts, zoom=FACE_ZOOM['face_pierre'], chunks=chunks if t < T_END else None, face_text=face_text)
         pop_name(img, t, o(4.84))
     elif kind.startswith('face_'):
         draw_face(img, frames, t, ts, chunks=chunks if t < T_END else None, face_text=face_text)
@@ -893,6 +939,7 @@ def main():
         frames.append(f)
     words = json.load(open(os.path.join(os.path.dirname(src), 'words.json')))
     chunks = build_chunks(words)
+    precompute_pills(frames, chunks)
     E = {n: Seq(os.path.join(d3, n)) for n in ('contracts', 'house', 'split')}
     thumbs = load_chaine()
     rng = np.random.default_rng(1)

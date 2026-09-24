@@ -1,6 +1,15 @@
 # MONTAGE — Vidéo Masterclass conciergerie (verticale 9:16)
 
-## Version 8 — la plus aboutie (recommandée) : `output/montage_v8.mp4`
+## Version 9 — la plus aboutie (recommandée) : `output/montage_v9.mp4`
+
+Tout ce qui est décrit en version 8, plus (revue qualité v8) :
+- **Une pastille stable par phrase** : même taille et même place du début à la fin de la phrase (union de toutes
+  les positions de l'ancienne boîte), donc plus de clignotement quand l'ancienne boîte n'est pas détectée sur
+  quelques images, ni de changement de forme au milieu d'une phrase.
+- Quand l'ancienne boîte sortait du cadre, la pastille devient une bande pleine largeur pour toute la phrase
+  (plus de pastille coupée au bord, texte centré).
+
+## Version 8 : `output/montage_v8.mp4`
 
 Tout ce qui est décrit en version 7, plus :
 - **Sous-titres des plans de Pierre dans des pastilles sombres arrondies**, posées exactement sur l'emplacement et la
