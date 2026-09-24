@@ -36,7 +36,11 @@ def main(voice_wav, sfx_dir, out_wav):
     for i in range(3): put('pop', o(0.95) + (58 + 7 * i) / 30, 0.16)                  # tampons « signé »
     if not os.environ.get('SANS_PASTILLES'):
         for x in (9.15, 16.6, 24.98, 32.74): put('pop_hi', o(x), 0.12)               # pastilles (version 3)
-    for x in (29.85, 30.45, 31.05): put('pop_hi', o(x), 0.10)                         # checklist
+    if os.environ.get('MODE') == 'ref':
+        for x in (27.95, 28.45, 28.95): put('pop_hi', o(x), 0.10)                     # checklist (v6)
+        for x in (12.95, 16.62, 16.95): put('pop', o(x), 0.14)                        # logos Airbnb / Booking
+    else:
+        for x in (29.85, 30.45, 31.05): put('pop_hi', o(x), 0.10)                     # checklist
     t_cpt = o(10.25) if os.environ.get('MODE') == 'ref' else o(9.95)
     for f in range(0, int((o(10.8) - t_cpt) * 30) + 1, 3): put('tick', t_cpt + f / 30, 0.08)   # compteur vidéos
     put('ding', o(10.8), 0.10); put('ding', T_END + 0.1, 0.12)

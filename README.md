@@ -1,5 +1,23 @@
 # MONTAGE — Vidéo Masterclass conciergerie (verticale 9:16)
 
+## Version 6 — images réelles (recommandée) : `output/montage_v6.mp4`
+
+- **Vraies photos** à la place de la 3D après la carte YouTube : remise de clés (conciergerie),
+  maison en bois + calculatrice (commission 20 à 25 %), ordinateur sur un bureau (masterclass, écran de fin).
+- **Sébastien MORE à l'écran de l'ordinateur** (image tirée de ses miniatures YouTube), façon vidéo de cours.
+- **Logos Airbnb et Booking.com** (officiels, Wikimedia Commons) quand Pierre parle d'Airbnb et de location courte durée.
+- **Plus de Pierre à la fin** : plan plein écran sur « location courte durée » (plus de lit) et de « qui t'explique… » jusqu'à la fin.
+- Corrections issues de la revue qualité : effacement des anciens sous-titres beaucoup plus précis (bouche et
+  tee-shirt nets), sous-titres affichés une seule fois pendant les transitions, plus aucun reste d'ancien bandeau,
+  typographie française (« 25 % », « location courte durée »).
+
+### Crédits photos (Licence Unsplash, usage commercial gratuit)
+- Remise de clés : Jakub Żerdzicki — https://unsplash.com/photos/holding-house-keys-in-front-of-the-entrance-bqUZEAeWuok
+- Maison en bois et calculatrice : Sasun Bughdaryan — https://unsplash.com/photos/model-house-with-calculator-and-pen-on-desk-jkO_wMw4168
+- Ordinateur sur bureau : Paulina Chmolowska — https://unsplash.com/photos/macbook-pro-on-brown-wooden-table-kBtuVD25HAA
+
+---
+
 ## Version 4 — au plus proche de la référence (recommandée) : `output/montage_v4.mp4`
 
 - **Visage plein écran** : les anciens sous-titres, la barre de progression et le logo sont effacés
