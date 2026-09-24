@@ -416,11 +416,13 @@ def card_chaine(img, t, E, YT):
     swap = o(10.25)
     if t < swap:
         if t >= o(9.1):
-            title(img, t, o(9.1), [[('10 ans', SAGE)], [("d'accompagnement.", INK)]], y=345)
+            title(img, t, o(9.1), [[('10 ans', SAGE), (" d'expérience.", INK)]], y=345)
+            op2, dy2 = appear(t, o(9.25))
+            put_text(img, [("d'accompagnement en conciergerie", MUTED)], 700, 38, 80, 455 + dy2, op2)
     else:
         k = ease_out((t - swap) / (o(10.8) - swap))
         n = int(round(1500 * k / 10) * 10)
-        title(img, t, swap, [[('{:,}'.format(n).replace(',', ' '), SAGE), (' vidéos.', INK)]], y=345)
+        title(img, t, swap, [[('+' + '{:,}'.format(n).replace(',', ' '), SAGE), (' vidéos.', INK)]], y=345)
         op2, dy2 = appear(t, o(10.9))
         put_text(img, [(YT['abonnes'], MUTED)], 700, 38, 80, 455 + dy2, op2)
     # grande miniature « à la une » qui change + deux bandes qui défilent
