@@ -1,6 +1,15 @@
 # MONTAGE — Vidéo Masterclass conciergerie (verticale 9:16)
 
-## Version 6 — images réelles (recommandée) : `output/montage_v6.mp4`
+## Version 7 — la plus aboutie (recommandée) : `output/montage_v7.mp4`
+
+Tout ce qui est décrit en version 6, plus :
+- **Sébastien MORE en vraie vidéo** sur l'écran de l'ordinateur (extraits de son compte TikTok « moresebastien »,
+  sans texte ni son, `assets/videos/`), façon lecteur de cours.
+- **Pierre à l'écran sur « Moi c'est Pierre… »**, avec son prénom en surimpression, avant la carte « Pierre & son père ».
+- Effacement des anciens sous-titres adouci : ombre douce sous les nouveaux sous-titres, pile sur la zone effacée.
+- Sous-titres dans le style de la scène dominante pendant les transitions ; écran de fin sans barre grise.
+
+## Version 6 — images réelles : `output/montage_v6.mp4`
 
 - **Vraies photos** à la place de la 3D après la carte YouTube : remise de clés (conciergerie),
   maison en bois + calculatrice (commission 20 à 25 %), ordinateur sur un bureau (masterclass, écran de fin).

@@ -40,7 +40,8 @@ o = src_to_out
 SCENES = [
     ('face_hook', 0.00, 0.95),
     ('contrats', 0.95, 4.45),
-    ('equipe', 4.45, 8.25),
+    ('face_pierre', 4.45, 5.65),
+    ('equipe', 5.65, 8.25),
     ('chaine', 8.25, 12.30),
     ('conciergerie', 12.30, 16.45),
     ('face_lcd', 16.45, 19.10),
@@ -247,7 +248,7 @@ def build_chunks(words):
     return out
 
 _subsh = {}
-def subtitles_video(img, ts, chunks, y=1565):
+def subtitles_video(img, ts, chunks, y=1592):
     """Sous-titres blancs sur la vidéo (ombre douce), mot-clé en vert clair."""
     for (a, b_, words_, hl) in chunks:
         if a - 0.02 <= ts < b_:
@@ -366,22 +367,22 @@ def clean_frame(frames, si):
     if si in _inp: return _inp[si]
     f = frames[si]
     mask = subtitle_mask(f)
-    out = cv2.inpaint(f, mask, 5, cv2.INPAINT_NS)
-    # lissage fort À L'INTÉRIEUR du masque seulement (supprime les stries), bord fondu sur 1-2 px
+    out = cv2.inpaint(f, mask, 5, cv2.INPAINT_TELEA)
+    # lissage léger À L'INTÉRIEUR du masque (supprime les stries sans créer de tache)
     m = cv2.erode(mask, np.ones((3, 3), np.uint8)).astype(np.float32) / 255
-    soft = cv2.GaussianBlur(m, (0, 0), 1.5)[..., None]
-    smooth_ = cv2.GaussianBlur(out, (0, 0), 7)
+    soft = cv2.GaussianBlur(m, (0, 0), 2.0)[..., None]
+    smooth_ = cv2.GaussianBlur(out, (0, 0), 3.5)
     out = (out * (1 - soft) + smooth_ * soft).astype(np.uint8)
     if len(_inp) > 90: _inp.clear()
-    _inp[si] = out
-    return out
+    _inp[si] = (out, mask)
+    return _inp[si]
 
 S0 = H / 848
-BOTTOM_SHADE = np.clip((np.arange(H, dtype=np.float32) - 1100) / 820, 0, 1)[:, None, None] ** 1.1 * 0.68
+BOTTOM_SHADE = np.clip((np.arange(H, dtype=np.float32) - 1080) / 700, 0, 1)[:, None, None] ** 1.05 * 0.78
 
 def draw_face(img, frames, t, ts, zoom=1.18):
     si = min(len(frames) - 1, int(round(ts * 30)))
-    f = clean_frame(frames, si)
+    f, emask = clean_frame(frames, si)
     start, idx = shot_start(ts)
     z = zoom + (0.04 if idx % 2 else 0.0) + 0.035 * ease_in_out((ts - start) / 4)
     s = S0 * z
@@ -395,7 +396,11 @@ def draw_face(img, frames, t, ts, zoom=1.18):
     lum = im @ np.array([0.299, 0.587, 0.114], np.float32)
     im = lum[..., None] + (im - lum[..., None]) * 0.93
     im = np.clip((im - 0.5) * 1.07 + 0.5 + np.array([0.012, 0.004, -0.010], np.float32), 0, 1)
-    img[:] = im * (1 - BOTTOM_SHADE)
+    # ombre douce posée exactement sur la zone effacée : elle sert de « lit » aux nouveaux sous-titres
+    em = cv2.warpAffine(emask.astype(np.float32) / 255, M, (W, H), flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP)
+    em = cv2.GaussianBlur(cv2.dilate(em, np.ones((31, 61), np.uint8)), (0, 0), 26)
+    shade = np.maximum(BOTTOM_SHADE[..., 0], np.clip(em, 0, 1) * 0.52)[..., None]
+    img[:] = im * (1 - shade)
 
 # ------------------------------------------------------------------ photos réelles (Unsplash) et écran du père
 YY_, XX_ = np.mgrid[0:H, 0:W].astype(np.float32)
@@ -430,13 +435,33 @@ def pere_img(vid, x0):
         _pere[k] = im[:, x0:]
     return _pere[k]
 
-def ecran_masterclass(t, t0, vid='sWiie3c__Lo', x0=660, sw=1060, sh=650, texte=('La conciergerie', 'Airbnb')):
-    """Image affichée sur l'écran de l'ordinateur : une « vidéo » de la masterclass avec Sébastien MORE."""
+_clips = {}
+def clip_frame(name, tc):
+    """Image d'un extrait vidéo réel de Sébastien MORE (assets/videos, sans son), à l'instant tc (s)."""
+    if name not in _clips:
+        cap = cv2.VideoCapture(os.path.join(ROOT, 'assets', 'videos', name)); fr = []
+        while True:
+            ok, f = cap.read()
+            if not ok: break
+            fr.append(f[..., ::-1].astype(np.float32) / 255)
+        _clips[name] = fr
+    fr = _clips[name]
+    return fr[int(clamp(tc * 30, 0, len(fr) - 1))]
+
+def ecran_masterclass(t, t0, vid='sWiie3c__Lo', x0=660, sw=1060, sh=650, texte=('La conciergerie', 'Airbnb'), clip=None):
+    """Image affichée sur l'écran de l'ordinateur : le lecteur de la masterclass avec Sébastien MORE
+    (extrait vidéo réel si « clip » est fourni, sinon image tirée d'une miniature)."""
     sl = np.empty((sh, sw, 3), np.float32); sl[:] = np.asarray(CREAM, np.float32)
-    dad = pere_img(vid, x0)
-    dh = sh; dw = int(dad.shape[1] * dh / dad.shape[0])
-    z = 1.0 + 0.06 * clamp((t - t0) / 4.5)                      # léger zoom : l'image vit
-    big = cv2.resize(dad, (int(dw * z), int(dh * z)), interpolation=cv2.INTER_AREA)
+    if clip:
+        dad = clip_frame(clip, max(0.0, t - t0))
+        dh = sh; dw = min(620, int(dad.shape[1] * dh / dad.shape[0]))
+        z = 1.0
+    else:
+        dad = pere_img(vid, x0)
+        dh = sh; dw = int(dad.shape[1] * dh / dad.shape[0])
+        z = 1.0 + 0.06 * clamp((t - t0) / 4.5)                  # léger zoom : l'image vit
+    sc_ = max(dw / dad.shape[1], dh / dad.shape[0]) * z
+    big = cv2.resize(dad, (max(dw, int(dad.shape[1] * sc_)), max(dh, int(dad.shape[0] * sc_))), interpolation=cv2.INTER_AREA)
     cy0 = (big.shape[0] - dh) // 3; cx0 = (big.shape[1] - dw) // 2
     sl[:, sw - dw:] = big[cy0:cy0 + dh, cx0:cx0 + dw]
     # fondu entre le panneau texte et l'image du père
@@ -447,10 +472,11 @@ def ecran_masterclass(t, t0, vid='sWiie3c__Lo', x0=660, sw=1060, sh=650, texte=(
         im = text_img(tuple(parts), wgt, size, track)
         a_ = im[..., 3:4]; h_, w_ = im.shape[:2]
         reg = sl[y:y + h_, x:x + w_]; reg[:] = reg * (1 - a_[:reg.shape[0], :reg.shape[1]]) + im[:reg.shape[0], :reg.shape[1], :3] * a_[:reg.shape[0], :reg.shape[1]]
+    ts_ = 58 if not clip else 48
     txt([('MASTERCLASS GRATUITE', SAGE)], 800, 22, 46, 70, 2)
-    txt([(texte[0], INK)], 800, 58, 42, 118)
-    txt([(texte[1], SAGE)], 800, 58, 42, 186)
-    txt([('avec Sébastien MORE', MUTED)], 700, 28, 46, 280)
+    txt([(texte[0], INK)], 800, ts_, 42, 118)
+    txt([(texte[1], SAGE)], 800, ts_, 42, 118 + int(ts_ * 1.15))
+    txt([('avec Sébastien MORE', MUTED)], 700, 28, 46, 130 + int(ts_ * 2.4))
     # barre de lecture
     y = sh - 34
     sl[y:y + 8, 40:sw - 40] = np.asarray(LINE, np.float32)
@@ -509,6 +535,20 @@ def pop_logo(img, t, t0, name, h_logo, x, y, anchor='left'):
     soft_shadow(img, x, y + (card.shape[0] - im.shape[0]) / 2, im.shape[1], im.shape[0], im.shape[0] // 2, 0.22 * op, 18, 12)
     blit(img, im, x, y + (card.shape[0] - im.shape[0]) / 2, op)
 
+def pop_name(img, t, t0):
+    """Prénom en surimpression (« Pierre ») quand il se présente."""
+    if t < t0: return
+    op, dy = appear(t, t0, 0.35)
+    im = text_img((('Pierre', INK),), 800, 58)
+    sub_ = text_img((('Conciergerie Airbnb', MUTED),), 700, 30)
+    pw = max(im.shape[1], sub_.shape[1]) + 76; ph = 150
+    x, y = 70, 250 + dy
+    soft_shadow(img, x, y, pw, ph, 30, 0.22 * op, 18, 12)
+    fill_rrect(img, x, y, pw, ph, 30, CREAM, op)
+    img[int(y) + 22:int(y) + ph - 22, x + 26:x + 32] = img[int(y) + 22:int(y) + ph - 22, x + 26:x + 32] * (1 - op) + np.asarray(SAGE) * op
+    blit(img, im, x + 50, y + 12, op)
+    blit(img, sub_, x + 52, y + 88, op)
+
 # ------------------------------------------------------------------ cartes
 def card_contrats(img, t, E):
     t0 = o(0.95)
@@ -531,7 +571,7 @@ def card_contrats(img, t, E):
         put_text(img, [('M%d' % (i + 1), SAGE if on else MUTED)], 700, 24, cx, y + 26, 1.0, 'center')
 
 def card_equipe(img, t, E):
-    t0 = o(4.45)
+    t0 = o(5.65)
     label(img, t, t0, "L'ÉQUIPE")
     title(img, t, t0 + 0.05, [[('Pierre', INK)], [('& son père.', MUTED)]])
     rows = [(o(6.05), '4 ans', 'à travailler ensemble'), (o(7.2), '10 ans', "d'accompagnement en conciergerie")]
@@ -659,7 +699,7 @@ def ordinateur_quad():
 def card_masterclass(img, t, E):
     t0 = o(25.20)
     M = photo_bg(img, 'ordinateur.jpg', t, t0, o(29.45) - t0 + TRANS, 0.44, 0.47, 1.55, 1.62, veil=0.9, veil_h=840)
-    incruste_ecran(img, M, ordinateur_quad(), ecran_masterclass(t, t0))
+    incruste_ecran(img, M, ordinateur_quad(), ecran_masterclass(t, t0, clip='pere_masterclass.mp4'))
     label(img, t, t0, 'MASTERCLASS GRATUITE')
     title(img, t, t0 + 0.05, [[('Une masterclass', INK)]])
     op, dy = appear(t, o(28.1))
@@ -667,11 +707,11 @@ def card_masterclass(img, t, E):
     items = [(o(27.95), "Comment fonctionne l'activité"), (o(28.45), 'Comment lancer ta conciergerie'), (o(28.95), 'Comment obtenir des résultats')]
     if t >= items[0][0] - 0.2:
         opp = clamp((t - items[0][0] + 0.2) / 0.3)
-        soft_shadow(img, 60, 1130, 960, 300, 34, 0.18 * opp, 22, 14)
-        fill_rrect(img, 60, 1130, 960, 300, 34, (1.0, 1.0, 1.0), 0.94 * opp)
+        soft_shadow(img, 60, 1180, 960, 262, 34, 0.18 * opp, 22, 14)
+        fill_rrect(img, 60, 1180, 960, 262, 34, (1.0, 1.0, 1.0), 0.94 * opp)
     for i, (tt, s_) in enumerate(items):
         op, dy = appear(t, tt, 0.4)
-        y = 1162 + i * 88 + dy
+        y = 1204 + i * 78 + dy
         check_icon(img, 118, y + 26, 24, SAGE, CREAM, op, clamp((t - tt - 0.1) / 0.3))
         put_text(img, [(s_, INK)], 700, 38, 164, y, op)
 
@@ -699,8 +739,8 @@ def card_chambre(img, t, E):
 def card_fin(img, t, E):
     t0 = T_END
     M = photo_bg(img, 'ordinateur.jpg', t, t0, END_HOLD + 0.5, 0.44, 0.50, 1.35, 1.45, veil=0.9, veil_h=640)
-    incruste_ecran(img, M, ordinateur_quad(), ecran_masterclass(t, t0, vid='8hotJuvXPuM', x0=680))
-    op, dy = appear(t, t0 + 0.05)
+    incruste_ecran(img, M, ordinateur_quad(), ecran_masterclass(t, t0, clip='pere_fin.mp4'))
+    op, dy = appear(t, t0 + TRANS)
     im = text_img((('MASTERCLASS GRATUITE', CREAM),), 700, 24, 3)
     fill_rrect(img, 76, 140 + dy, im.shape[1] + 44, 52, 26, INK, op)
     blit(img, im, 98, 150 + dy, op)
@@ -734,6 +774,9 @@ def render_scene(sc, t, frames, E, chunks, thumbs, ts_max=None):
     t0 = o(a)
     if kind == 'face_hook':
         draw_face(img, frames, t, ts, zoom=1.42)
+    elif kind == 'face_pierre':         # zoom serré : le haut du rush (ancien bandeau) reste hors cadre
+        draw_face(img, frames, t, ts, zoom=1.60)
+        pop_name(img, t, o(4.84))
     elif kind.startswith('face_'):
         draw_face(img, frames, t, ts)
         if kind == 'face_lcd':          # « location courte durée » : les plateformes
@@ -808,7 +851,10 @@ def main():
             dy = int(70 * (1 - k))
             new = np.concatenate([img[dy:], np.repeat(img[-1:], dy, 0)]) if dy else img
             img = prev * (1 - k) + new * k
-        draw_subs(img, SCENES[i], t, chunks)
+        dominante = SCENES[i]
+        if i > 0 and t - starts[i] < TRANS and (t - starts[i]) / TRANS < 0.5:
+            dominante = SCENES[i - 1]
+        draw_subs(img, dominante, t, chunks)
         if t > DUR - 0.25:
             img = img * clamp((DUR - t) / 0.25) + np.asarray(BG) * (1 - clamp((DUR - t) / 0.25))
         img = img + grain[fi % 4]
